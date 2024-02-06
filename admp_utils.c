@@ -1,7 +1,11 @@
 #include <stdio.h>
+
 #include "admp_utils.h"
 
-/* admp_hexdump: hexdump function written by ccbrown; thanks to ccbrown!! */
+/*
+ * admp_hexdump: hexdump function written by ccbrown;
+ * thanks to ccbrown!!
+ */
 void admp_hexdump(const void* data, size_t size)
 {
     char ascii[17];

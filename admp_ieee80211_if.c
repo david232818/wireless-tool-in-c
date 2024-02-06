@@ -1,20 +1,15 @@
-#define _GNU_SOURCE /* To get defns of NI_MAXSERV and NI_MAXHOST */
-
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netdb.h>
-#include <ifaddrs.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <unistd.h>
-#include <linux/if_link.h>
-#include <linux/if_packet.h>
-#include <net/ethernet.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <linux/if_ether.h>
 #include <linux/wireless.h>
+
 #include "admp_ieee80211_if.h"
 #include "admp_err.h"
 

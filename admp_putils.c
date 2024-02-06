@@ -1,14 +1,9 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/ether.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <linux/if_packet.h>
-#include <stdint.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "admp_ieee80211_if.h"
 #include "admp_err.h"

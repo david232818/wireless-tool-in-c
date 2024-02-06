@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <stdlib.h>
+
 #include "admp_err.h"
 
 #define ADMP_ERR_OFFSET ADMP_ERR_INVALID_ARGS
@@ -22,5 +22,7 @@ void admp_printerr(admp_res_t res, const char *err_func)
 	return ;
 
     perror(err_func);
-    fprintf(stderr, "\n%s in %s\n", errmsg[res - ADMP_ERR_OFFSET], err_func);
+    fprintf(stderr,
+	    "\n%s in %s\n",
+	    errmsg[res - ADMP_ERR_OFFSET], err_func);
 }
