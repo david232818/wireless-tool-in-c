@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 	return -1;
     }
 
-    res = admp_ieee80211_if_init(argv[argc - 1], &iface);
+    res = admp_ieee80211_if_init(argv[argc - 1], &iface, -1);
     if (res != ADMP_SUCCESS) {
 	fprintf(stderr,
 		"Interface setup failed.. (%d)\n",
