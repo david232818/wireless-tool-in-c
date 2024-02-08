@@ -13,13 +13,14 @@
 #include "admp_ieee80211_if.h"
 #include "admp_err.h"
 
-admp_res_t ieee80211_ioctl_if(const int fd,
-			      const char *name,
-			      unsigned long req,
-			      struct ifreq *ifr)
+/* prv_ieee80211_ioctl_if: do ioctl of given (network interface) name */
+admp_res_t prv_ieee80211_ioctl_if(const int fd,
+				  const char *name,
+				  unsigned long req,
+				  struct ifreq *ifr)
 {
-    if (ifr == NULL) {
-	admp_printerr(ADMP_ERR_INVALID_ARGS, "ieee80211_ioctl_if");
+    if (fd == -1 || name == NULL || ifr == NULL) {
+	admp_printerr(ADMP_ERR_INVALID_ARGS, "prv_ieee80211_ioctl_if");
 	return -ADMP_ERR_INVALID_ARGS;
     }
 
@@ -31,13 +32,14 @@ admp_res_t ieee80211_ioctl_if(const int fd,
     return ADMP_SUCCESS;
 }
 
-admp_res_t ieee80211_ioctl_iw(const int fd,
-			      const char *name,
-			      const unsigned long req,
-			      struct iwreq *iwr)
+/* prv_ieee80211_ioctl_iw: do ioctl of given (wireless interface) name */
+admp_res_t prv_ieee80211_ioctl_iw(const int fd,
+				  const char *name,
+				  const unsigned long req,
+				  struct iwreq *iwr)
 {
-    if (iwr == NULL) {
-	admp_printerr(ADMP_ERR_INVALID_ARGS, "ieee80211_ioctl_iw");
+    if (fd == -1 || name == NULL || iwr == NULL) {
+	admp_printerr(ADMP_ERR_INVALID_ARGS, "prv_ieee80211_ioctl_iw");
 	return -ADMP_ERR_INVALID_ARGS;
     }
 
@@ -49,13 +51,11 @@ admp_res_t ieee80211_ioctl_iw(const int fd,
     return ADMP_SUCCESS;
 }
 
-static admp_res_t ieee80211_set_if_mode(struct admp_ieee80211_if_info *info,
-					struct ifreq *ifr,
-					struct iwreq *iwr,
-					const unsigned long mode)
+/* prv_ieee80211_set_if_mode: set wireless interface mode to given mode */
+static admp_res_t prv_ieee80211_set_if_mode(struct admp_ieee80211_if_info *info,
+					    const unsigned long mode)
 {
-    admp_res_t res;
-    char *modes[8] = {
+    char *modes[] = {
 	"driver decided mode",
 	"single cell network",
 	"multi cell network, roaming",
@@ -65,60 +65,71 @@ static admp_res_t ieee80211_set_if_mode(struct admp_ieee80211_if_info *info,
 	"passive monitor (listen only)",
 	"mesh (IEEE 802.11s) network"
     };
+    struct ifreq ifr;
+    struct iwreq iwr;
+    admp_res_t res;
 
-    if (info == NULL || ifr == NULL || iwr == NULL) {
-	admp_printerr(ADMP_ERR_INVALID_ARGS, "ieee80211_set_if_mode");
-	return -ADMP_ERR_INVALID_ARGS;
+    if (info == NULL) {
+	res = -ADMP_ERR_INVALID_ARGS;
+	admp_printerr(-res, "prv_ieee80211_set_if_mode");
+	goto OUT;
     }
 
     puts("Interface Down..");
-    ifr->ifr_flags |= (short) 0xffff;
-    ifr->ifr_flags &= ~IFF_UP;
-    res = IEEE80211_SET_IF_FLAG(info->fd, info->name, ifr);
+    ifr.ifr_flags |= ((short) ~0) & ~IFF_UP;
+    res = IEEE80211_SET_IF_FLAG(info->fd, info->name, &ifr);
     if (res != ADMP_SUCCESS)
 	goto OUT;
 
+    if (!ADMP_IS_X_IN_RANGE(0, info->mode, sizeof(modes))
+	|| !ADMP_IS_X_IN_RANGE(0, mode, sizeof(modes))) {
+	res = -ADMP_ERR_INVALID_ARGS;
+	admp_printerr(-res, "prv_ieee80211_set_if_mode");
+	goto OUT;
+    }
     printf("%s to %s\n", modes[info->mode], modes[mode]);
-    iwr->u.mode = mode;
-    res = IEEE80211_SET_IW_MODE(info->fd, info->name, iwr);
+    iwr.u.mode = mode;
+    res = IEEE80211_SET_IW_MODE(info->fd, info->name, &iwr);
     if (res != ADMP_SUCCESS)
 	goto OUT;
-
     info->mode = mode;
 
     puts("Interface Up..");
-    ifr->ifr_flags |= IFF_UP;
-    res = IEEE80211_SET_IF_FLAG(info->fd, info->name, ifr);
+    ifr.ifr_flags |= IFF_UP;
+    res = IEEE80211_SET_IF_FLAG(info->fd, info->name, &ifr);
     if (res != ADMP_SUCCESS)
 	goto OUT;
+
+    return ADMP_SUCCESS;
 
 OUT:
     return res;
 }
 
+/* admp_ieee80211_if_init: initialize wireless interface info to given name */
 admp_res_t admp_ieee80211_if_init(const char *name,
-				  struct admp_ieee80211_if_info *info)
+				  struct admp_ieee80211_if_info *info,
+				  int64_t mode)
 {
     admp_res_t res;
     struct iwreq iwr;
     struct ifreq ifr;
 
-    if (name == NULL) {
-	res = -ADMP_ERR_INVALID_ARGS;
-	admp_printerr(-res,
+    if (name == NULL || info == NULL) {
+	admp_printerr(ADMP_ERR_INVALID_ARGS,
 		      "admp_ieee80211_if_init");
+	res = -ADMP_FAIL;
 	goto OUT;
     }
 
     info->fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (info->fd == -1) {
-	res = -ADMP_ERR_SOCKET;
-	admp_printerr(-res, "socket");
+	admp_printerr(-ADMP_ERR_SOCKET, "socket");
+	res = -ADMP_FAIL;
 	goto OUT;
     }
 
     strncpy(info->name, name, IFNAMSIZ);
-    strncpy(iwr.ifr_ifrn.ifrn_name, name, IFNAMSIZ);
 
     res = IEEE80211_GET_IW_BY_NAME(info->fd, info->name, &iwr);
     if (res != ADMP_SUCCESS)
@@ -143,14 +154,21 @@ admp_res_t admp_ieee80211_if_init(const char *name,
     info->prev_mode = iwr.u.mode;
     info->mode = iwr.u.mode;
 
-    if (iwr.u.mode != IW_MODE_MONITOR) {
-	puts("Interface is not in monitor mode..");
-	puts("Changing it to monitor mode..");
+    if (mode < 0) {		/*
+				 * By default, function sets interface mode
+				 * to monitor mode
+				 */
+	if (iwr.u.mode != IW_MODE_MONITOR) {
+	    puts("Interface is not in monitor mode..");
+	    puts("Changing it to monitor mode..");
 
-	res = ieee80211_set_if_mode(info,
-				    &ifr,
-				    &iwr,
-				    IW_MODE_MONITOR);
+	    res = ieee80211_set_if_mode(info,
+					IW_MODE_MONITOR);
+	    if (res != ADMP_SUCCESS)
+		goto CLOSE_AND_OUT;
+	}
+    } else {
+	res = ieee80211_set_if_mode(info, mode);
 	if (res != ADMP_SUCCESS)
 	    goto CLOSE_AND_OUT;
     }
@@ -165,6 +183,7 @@ OUT:
     return res;
 }
 
+/* admp_ieee80211_if_destroy: destroy wireless interface info data */
 admp_res_t admp_ieee80211_if_destroy(struct admp_ieee80211_if_info *info)
 {
     struct iwreq iwr;
@@ -172,10 +191,9 @@ admp_res_t admp_ieee80211_if_destroy(struct admp_ieee80211_if_info *info)
     admp_res_t res;
 
     if (info == NULL) {
-	admp_printerr(ADMP_ERR_INVALID_ARGS,
-		      "admp_ieee80211_if_destroy");
-	return -ADMP_ERR_INVALID_ARGS;
-
+	res = -ADMP_ERR_INVALID_ARGS;
+	admp_printerr(-res, "admp_ieee80211_if_destroy");
+	goto FAIL;
     }
 
     strncpy(iwr.ifr_ifrn.ifrn_name, info->name, IFNAMSIZ);
@@ -190,8 +208,11 @@ admp_res_t admp_ieee80211_if_destroy(struct admp_ieee80211_if_info *info)
     if (close(info->fd) == -1) {
 	res = -ADMP_ERR_CLOSE;
 	admp_printerr(-res, "close");
-	return res;
+	goto FAIL;
     }
     memset(info, 0x0, sizeof(*info));
     return ADMP_SUCCESS;
+
+FAIL:
+    return res;
 }

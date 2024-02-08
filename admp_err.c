@@ -4,18 +4,20 @@
 
 #define ADMP_ERR_OFFSET ADMP_ERR_INVALID_ARGS
 
-/* printerr: print error message */
-void admp_printerr(admp_res_t res, const char *err_func)
-{
-    char *errmsg[] = {
-	"Invalid arguments (e.g., NULL)",
-	"socket() error",
-	"IW command of ioctl() error",
-	"IF command of ioctl() error",
-	"close() error",
-    };
+/* Error message table */
+static char *errmsg[] = {
+    "Invalid arguments (e.g., NULL, Out-Of-Range)",
+    "socket() error",
+    "IW command of ioctl() error",
+    "IF command of ioctl() error",
+    "close() error",
+    "Unknown frame"
+}; 
 
-    if (res < ADMP_ERR_OFFSET || res > ADMP_ERR_COUNT)
+/* admp_printerr: print error message */
+void admp_printerr(const admp_res_t res, const char *err_func)
+{
+    if (res < ADMP_ERR_OFFSET || res >= ADMP_ERR_COUNT)
 	return ;
 
     if (err_func == NULL)
