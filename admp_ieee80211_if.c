@@ -203,7 +203,7 @@ admp_res_t admp_ieee80211_if_destroy(struct admp_ieee80211_if_info *info)
 	 * Setting interface mode to a previous mode may fail but in this phase,
 	 * this is not an fatal error. So just move on.
 	 */
-	ieee80211_set_if_mode(info, &ifr, &iwr, info->prev_mode);
+	prv_ieee80211_set_if_mode(info, &ifr, &iwr, info->prev_mode);
     }
 
     if (close(info->fd) == -1) {
