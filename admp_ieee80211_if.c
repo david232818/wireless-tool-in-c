@@ -12,6 +12,7 @@
 
 #include "admp_ieee80211_if.h"
 #include "admp_err.h"
+#include "admp_utils.h"
 
 /* prv_ieee80211_ioctl_if: do ioctl of given (network interface) name */
 admp_res_t prv_ieee80211_ioctl_if(const int fd,
@@ -162,13 +163,13 @@ admp_res_t admp_ieee80211_if_init(const char *name,
 	    puts("Interface is not in monitor mode..");
 	    puts("Changing it to monitor mode..");
 
-	    res = ieee80211_set_if_mode(info,
-					IW_MODE_MONITOR);
+	    res = prv_ieee80211_set_if_mode(info,
+					    IW_MODE_MONITOR);
 	    if (res != ADMP_SUCCESS)
 		goto CLOSE_AND_OUT;
 	}
     } else {
-	res = ieee80211_set_if_mode(info, mode);
+	res = prv_ieee80211_set_if_mode(info, mode);
 	if (res != ADMP_SUCCESS)
 	    goto CLOSE_AND_OUT;
     }
