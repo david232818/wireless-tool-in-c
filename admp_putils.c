@@ -10,6 +10,7 @@
 #include "admp_putils.h"
 #include "admp_utils.h"
 
+/* prv_ieee80211_beacon_parser: parse given frame as a beacon frame */
 static admp_res_t
 prv_ieee80211_beacon_parser(struct admp_ieee80211_mgmt_frame *frame,
 			    ssize_t len,
@@ -46,6 +47,10 @@ prv_ieee80211_beacon_parser(struct admp_ieee80211_mgmt_frame *frame,
     return ADMP_SUCCESS;
 }
 
+/*
+ * prv_ieee80211_assoc_req_parser: parse given frame as a association
+ * request frame
+ */
 static admp_res_t
 prv_ieee80211_assoc_req_parser(struct admp_ieee80211_mgmt_frame *frame,
 			       ssize_t len,
@@ -84,6 +89,7 @@ prv_ieee80211_assoc_req_parser(struct admp_ieee80211_mgmt_frame *frame,
     return ADMP_SUCCESS;
 }
 
+/* prv_ieee80211_mgmt_parser: parse given buff as a management frame */
 static admp_res_t prv_ieee80211_mgmt_parser(void *buff,
 					    ssize_t len,
 					    struct admp_ieee80211_ap_info *ap)
@@ -150,6 +156,7 @@ static admp_res_t prv_ieee80211_mgmt_parser(void *buff,
     return res;
 }
 
+/* prv_ieee80211_parser: parse given buff as a generic frame */
 static admp_res_t prv_ieee80211_parser(void *buff,
 				       ssize_t len,
 				       struct admp_ieee80211_ap_info *ap)
@@ -181,6 +188,10 @@ static admp_res_t prv_ieee80211_parser(void *buff,
     return res;
 }
 
+/*
+ * prv_ieee80211_radiotap_get_offset: get offset of specific field in the
+ * radiotap header described by a bit location
+ */
 static unsigned int prv_ieee80211_radiotap_get_offset(uint64_t present,
 						      unsigned int bit_loc)
 {
@@ -205,6 +216,7 @@ static unsigned int prv_ieee80211_radiotap_get_offset(uint64_t present,
     return offset;
 }
 
+/* prv_ieee80211_radiotap_parser: parse buff as a radiotap header */
 static void *prv_ieee80211_radiotap_parser(void *buff,
 					   ssize_t len,
 					   struct admp_ieee80211_ap_info *ap)
