@@ -150,7 +150,7 @@ static admp_res_t prv_ieee80211_mgmt_parser(void *buff,
 	res = prv_ieee80211_beacon_parser(frame, len, ap);
 	break;
     default:
-	res = -ADMP_ERR_INVALID_FRAME;
+	res = -ADMP_ERR_UNKOWN_FRAME;
 	break;
     }
     return res;
@@ -182,7 +182,7 @@ static admp_res_t prv_ieee80211_parser(void *buff,
 	/* Data frame */
 	break;
     default:
-	res = -ADMP_ERR_INVALID_FRAME;
+	res = -ADMP_ERR_UNKOWN_FRAME;
 	break;
     }
     return res;
