@@ -187,8 +187,6 @@ OUT:
 /* admp_ieee80211_if_destroy: destroy wireless interface info data */
 admp_res_t admp_ieee80211_if_destroy(struct admp_ieee80211_if_info *info)
 {
-    struct iwreq iwr;
-    struct ifreq ifr;
     admp_res_t res;
 
     if (info == NULL) {
@@ -197,7 +195,6 @@ admp_res_t admp_ieee80211_if_destroy(struct admp_ieee80211_if_info *info)
 	goto FAIL;
     }
 
-    strncpy(iwr.ifr_ifrn.ifrn_name, info->name, IFNAMSIZ);
     if (info->prev_mode != IW_MODE_MONITOR) {
 	/*
 	 * Setting interface mode to a previous mode may fail but in this phase,
