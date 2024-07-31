@@ -4,18 +4,24 @@
 #include <stddef.h>
 
 struct ll_node {
+    struct ll_node *head;
+    struct ll_node *prev;
     struct ll_node *next;
+    void *obj;
 };
 
-struct ll_list {
-    struct ll_link *head;
-    size_t dataoff;
+int ll_node_init(struct ll_node *node, size_t objoff);
 
-    int (*compare)(void *, void *); /* shall return -1 or 0 or 1 */
-    int (*getdata)(void *);
-};
+#define LL_NODE_INIT(nodep, objtype, nodename) \
+    ll_node_init((nodep), offsetof(objtype, nodename))
 
-struct ll_list *ll_list_init(size_t dataoff, size_t datasize);
-void ll_list_destroy(struct ll_list *list);
+void ll_node_add_tail(struct ll_node *list, struct ll_node *node);
+void ll_node_remove(struct ll_node *node);
+void ll_node_clear(struct ll_node *list, void (*destroy)(void *obj));
+
+#define LL_NODE_FOREACH(listp, currp)		\
+    for ((currp) = (listp)->head->next;		\
+	 (currp) != (currp)->head;		\
+	 (currp) = (currp)->next)
 
 #endif
