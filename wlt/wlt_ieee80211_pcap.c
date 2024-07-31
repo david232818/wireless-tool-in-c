@@ -42,7 +42,13 @@ static int ___wlt_ieee80211_beacon_parser(struct wlt_ieee80211_mgmt_frm *frm,
 	switch (ie->type) {
 	case 0x00:
 	    /* SSID */
+	    if (ie->len > WLT_IEEE80211_APNAMSIZ - 1) {
+		done = 1;
+		break;
+	    }
+	    
 	    strncpy(ap->ssid, (char *) ie->data, ie->len);
+	    ap->ssid[ie->len] = '\0';
 	    done = 1;
 	    break;
 	default:
@@ -82,7 +88,13 @@ ___wlt_ieee80211_assoc_req_parser(struct wlt_ieee80211_mgmt_frm *frm,
 	switch (ie->type) {
 	case 0x00:
 	    /* SSID */
+	    if (ie->len > WLT_IEEE80211_APNAMSIZ - 1) {
+		done = 1;
+		break;
+	    }
+	    
 	    strncpy(ap->ssid, (char *) ie->data, ie->len);
+	    ap->ssid[ie->len] = '\0';
 	    done = 1;
 	    break;
 	default:
@@ -269,7 +281,7 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
     int fdflags, epollfd, evtcnt, i;
     int res;
     struct epoll_event evts[2], epoll_evts[MAX_EVTCNT];
-    struct wlt_ieee80211_ap *apbuf;
+    struct wlt_ieee80211_ap *apbuf, *aplist, *ap;
     ssize_t frmlen;
     uint8_t buff[WLT_IEEE80211_BUFSIZ];
 
@@ -297,30 +309,31 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
     evts[0].data.fd = wdev->sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, wdev->sockfd, &evts[0]) < 0) {
 	perror("epoll_ctl");
-	close(epollfd);
-	return -1;
+	goto FAIL_CLOSE_EPOLLFD;
     }
 
     evts[1].events = EPOLLIN;
     evts[1].data.fd = STDIN_FILENO;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, STDIN_FILENO, &evts[1]) < 0) {
 	perror("epoll_ctl");
-	close(epollfd);
-	return -1;
+	goto FAIL_CLOSE_EPOLLFD;
     }
 
     apbuf = wlt_ieee80211_ap_init();
-    if (apbuf == NULL) {
-	close(epollfd);
-	return -1;
+    if (apbuf == NULL)
+	goto FAIL_CLOSE_EPOLLFD;
+
+    aplist = wlt_ieee80211_ap_init();
+    if (aplist == NULL) {
+	wlt_ieee80211_ap_destroy(apbuf);
+	goto FAIL_CLOSE_EPOLLFD;
     }
 
     while (1) {
 	evtcnt = epoll_wait(epollfd, epoll_evts, MAX_EVTCNT, 5000);
 	if (evtcnt < 0) {
 	    perror("epoll_wait");
-	    close(epollfd);
-	    return -1;
+	    goto FAIL_FREE_MEMORY;
 	}
 
 	for (i = 0; i < evtcnt; i++) {
@@ -331,9 +344,20 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
 		    res = _wlt_ieee80211_parser(buff, frmlen, apbuf);
 		}
 
-		if (!res) {
-		    printf("%s - %d\n", apbuf->ssid, apbuf->antsig);
-		    memset(apbuf, 0x00, sizeof(*apbuf));
+		/* if (!res) { */
+		/*     printf("%s - %d\n", apbuf->ssid, apbuf->antsig); */
+		/*     memset(apbuf, 0x00, sizeof(*apbuf)); */
+		/* } */
+
+		if (!res && (wlt_ieee80211_ap_search(aplist, apbuf) ==
+			     WLT_IEEE80211_AP_NOT_FOUND)) {
+		    ap = wlt_ieee80211_ap_init();
+		    if (ap == NULL)
+			goto FAIL_FREE_MEMORY;
+
+		    memcpy(ap, apbuf, offsetof(struct wlt_ieee80211_ap, node));
+		    wlt_ieee80211_ap_add_tail(aplist, ap);
+		    printf("%s - %d\n", ap->ssid, ap->antsig);
 		}
 	    }
 
@@ -344,18 +368,26 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
 	    }
 	}
 
-	puts("channel hopping..");
+	/* puts("channel hopping.."); */
 	/* printf("channel: %d\n", wdev->chann); */
 	if (wlt_setchann(wdev,
-			 WLT_IEEE80211_24_HOP_CHANN(wdev->chann)) == -1) {
-	    close(epollfd);
-	    free(apbuf);
-	    return -1;
-	}
+			 WLT_IEEE80211_24_HOP_CHANN(wdev->chann)) == -1)
+	    goto FAIL_FREE_MEMORY;
     }
+
+FAIL_FREE_MEMORY:
+    wlt_ieee80211_ap_destroy(apbuf);
+    wlt_ieee80211_ap_list_clear(aplist);
+    wlt_ieee80211_ap_destroy(aplist);
+    
+FAIL_CLOSE_EPOLLFD:
+    close(epollfd);
+    return -1;
     
 OUT:
     close(epollfd);
-    free(apbuf);
+    wlt_ieee80211_ap_destroy(apbuf);
+    wlt_ieee80211_ap_list_clear(aplist);
+    wlt_ieee80211_ap_destroy(aplist);
     return 0;
 }

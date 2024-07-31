@@ -113,7 +113,7 @@ int wlt_setmode(struct wlt_dev *wdev, const uint32_t mode)
     if (WLT_SET_IF_FLAG(wdev->sockfd, wdev->name, &ifr) == -1)
 	return -1;
 
-    printf("Changing mode from %s to %s.. ", modes[wdev->prevmode],
+    printf("Changing mode from %s to %s..\n", modes[wdev->prevmode],
 	   modes[mode]);
     iwr.u.mode = mode;
     res = WLT_SET_IW_MODE(wdev->sockfd, wdev->name, &iwr);
