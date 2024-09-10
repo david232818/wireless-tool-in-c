@@ -281,7 +281,8 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
     int fdflags, epollfd, evtcnt, i;
     int res;
     struct epoll_event evts[2], epoll_evts[MAX_EVTCNT];
-    struct wlt_ieee80211_ap *apbuf, *aplist, *ap;
+    struct wlt_ieee80211_ap *apbuf, *ap;
+    aplist_t auth_aplist;
     ssize_t frmlen;
     uint8_t buff[WLT_IEEE80211_BUFSIZ];
 
@@ -323,12 +324,8 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
     if (apbuf == NULL)
 	goto FAIL_CLOSE_EPOLLFD;
 
-    aplist = wlt_ieee80211_ap_init();
-    if (aplist == NULL) {
-	wlt_ieee80211_ap_destroy(apbuf);
-	goto FAIL_CLOSE_EPOLLFD;
-    }
-
+    APLIST_INIT(&auth_aplist);
+    
     while (1) {
 	evtcnt = epoll_wait(epollfd, epoll_evts, MAX_EVTCNT, 5000);
 	if (evtcnt < 0) {
@@ -349,14 +346,14 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
 		/*     memset(apbuf, 0x00, sizeof(*apbuf)); */
 		/* } */
 
-		if (!res && (wlt_ieee80211_ap_search(aplist, apbuf) ==
+		if (!res && (wlt_ieee80211_ap_search(&auth_aplist, apbuf) ==
 			     WLT_IEEE80211_AP_NOT_FOUND)) {
 		    ap = wlt_ieee80211_ap_init();
 		    if (ap == NULL)
 			goto FAIL_FREE_MEMORY;
 
 		    memcpy(ap, apbuf, offsetof(struct wlt_ieee80211_ap, node));
-		    wlt_ieee80211_ap_add_tail(aplist, ap);
+		    wlt_ieee80211_ap_add_tail(&auth_aplist, ap);
 		    printf("%s - %d\n", ap->ssid, ap->antsig);
 		}
 	    }
@@ -377,8 +374,7 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
 
 FAIL_FREE_MEMORY:
     wlt_ieee80211_ap_destroy(apbuf);
-    wlt_ieee80211_ap_list_clear(aplist);
-    wlt_ieee80211_ap_destroy(aplist);
+    wlt_ieee80211_ap_list_clear(&auth_aplist);
     
 FAIL_CLOSE_EPOLLFD:
     close(epollfd);
@@ -387,7 +383,6 @@ FAIL_CLOSE_EPOLLFD:
 OUT:
     close(epollfd);
     wlt_ieee80211_ap_destroy(apbuf);
-    wlt_ieee80211_ap_list_clear(aplist);
-    wlt_ieee80211_ap_destroy(aplist);
+    wlt_ieee80211_ap_list_clear(&auth_aplist);
     return 0;
 }

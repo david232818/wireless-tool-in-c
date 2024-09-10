@@ -3,25 +3,53 @@
 
 #include <stddef.h>
 
+/* Linked List Structure */
 struct ll_node {
-    struct ll_node *head;
+    struct ll_node *head;	/* First node and handle for a list */
     struct ll_node *prev;
     struct ll_node *next;
-    void *obj;
+    void *obj;			/* Object holding this node */
 };
 
-int ll_node_init(struct ll_node *node, size_t objoff);
+inline void ll_node_remove(struct ll_node *node)
+{
+    node->next->prev = node->prev;
+    node->prev->next = node->next;
+    node->head = node;
+    node->prev = node;
+    node->next = node;
+}
 
-#define LL_NODE_INIT(nodep, objtype, nodename) \
-    ll_node_init((nodep), offsetof(objtype, nodename))
-
-void ll_node_add_tail(struct ll_node *list, struct ll_node *node);
-void ll_node_remove(struct ll_node *node);
 void ll_node_clear(struct ll_node *list, void (*destroy)(void *obj));
 
-#define LL_NODE_FOREACH(listp, currp)		\
-    for ((currp) = (listp)->head->next;		\
-	 (currp) != (currp)->head;		\
-	 (currp) = (currp)->next)
+inline void ll_node_insert(struct ll_node *prev,
+			   struct ll_node *node,
+			   struct ll_node *next)
+{
+    node->next = next;
+    node->prev = prev;
+    prev->next = node;
+    next->prev = node;
+    node->head = prev->head;
+}
+
+void ll_node_add_tail(struct ll_node *list,
+		      struct ll_node *node);
+
+inline void ll_node_init(struct ll_node *node, void *obj)
+{
+    node->head = node;
+    node->prev = node;
+    node->next = node;
+    node->obj = obj;
+}
+
+#define LL_HEAD_NODE_INIT(headp) ll_node_init((headp), NULL)
+
+#define LL_NODE_FOREACH(listp, currp, nextp)		\
+    for ((currp) = (listp)->head->next,			\
+	     (nextp) = (currp)->next;			\
+	 (currp) != (listp)->head;			\
+	 (currp) = (nextp), (nextp) = (nextp)->next)
 
 #endif
