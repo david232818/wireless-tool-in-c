@@ -1,6 +1,6 @@
 # Makefile
 
-SUBDIRS = wlt main
+SUBDIRS = ll wlt main
 OBJDIR = ./obj
 EXENAME = ./bin/wltool
 
