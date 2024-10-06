@@ -16,7 +16,8 @@ struct wlt_ieee80211_radiotap_hdr {
     (((present) >> 31) & 1)
 
 #define WLT_RADIOTAP_ANTSIG_BITLOC 5
-#define WLT_IS_RADIOTAP_ANTENNA_SIG_PRESENT(present) \
+
+#define WLT_IS_RADIOTAP_ANTENNA_SIG_PRESENT(present)	\
     (((present) >> 5) & 1)
 
 struct wlt_ieee80211_frm_ctl {
@@ -86,8 +87,23 @@ struct wlt_ieee80211_tld {
     uint8_t data[];		/* Data */
 } __attribute__((__packed__));
 
+/* IEEE 802.11 2.4GHz macros */
+
+#define WLT_IEEE80211_24_BASE_FREQ 2407
+#define WLT_IEEE80211_24_FREQ_INTERVAL 5
+
+#define WLT_IEEE80211_24_FREQ2CHANN(freq)				\
+    (((freq) - WLT_IEEE80211_24_BASE_FREQ) / WLT_IEEE80211_24_FREQ_INTERVAL)
+
+#define WLT_IEEE80211_24_CHANN2FREQ_M(chann)				\
+    (((chann) * WLT_IEEE80211_24_FREQ_INTERVAL + WLT_IEEE80211_24_BASE_FREQ) \
+     * 100000)
+
+#define WLT_IEEE80211_24_HOP_CHANN(currchan) (((currchan) + 1) % 13 + 1)
+
 #define WLT_IEEE80211_BUFSIZ 4096
 
-int wlt_ieee80211_pcap(struct wlt_dev *wdev);
+/* wlt_ieee80211_pcap: heart of IEEE 802.11 sniffing */
+int wlt_ieee80211_pcap(struct wlt_wdev *wdevp);
 
 #endif
