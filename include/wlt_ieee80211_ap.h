@@ -6,9 +6,10 @@
 
 #define WLT_IEEE80211_APNAMSIZ 32
 
+/* IEEE 802.11 AP structure */
 struct wlt_ieee80211_ap {
-    int8_t antsig;
-    uint8_t bssid[7];		/* 6th byte to check bssid is not NULL */
+    int8_t antsig;	     /* antenna signal */
+    uint8_t bssid[7];		/* 6th byte is for NULL check */
     char ssid[WLT_IEEE80211_APNAMSIZ];
 
     struct ll_node node;
@@ -18,7 +19,7 @@ typedef struct ll_node aplist_t;
 
 #define APLIST_INIT(headp) LL_HEAD_NODE_INIT((headp))
 
-enum ap_search_flag {
+enum ap_search_flags {
     WLT_IEEE80211_AP_NOT_FOUND = 0,
     WLT_IEEE80211_AP_FOUND = 1,
     WLT_SEARCH_FLAG_MAX
@@ -26,10 +27,14 @@ enum ap_search_flag {
 
 int wlt_ieee80211_ap_search(aplist_t *aplist,
 			    struct wlt_ieee80211_ap *target);
+
 void wlt_ieee80211_ap_add_tail(aplist_t *aplist,
 			       struct wlt_ieee80211_ap *ap);
+
 struct wlt_ieee80211_ap *wlt_ieee80211_ap_init(void);
+
 void wlt_ieee80211_ap_destroy(void *ap);
+
 void wlt_ieee80211_ap_list_clear(aplist_t *aplist);
 
 #endif
