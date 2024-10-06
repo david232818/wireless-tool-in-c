@@ -1,60 +1,54 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <linux/if_packet.h>
-#include <net/ethernet.h>
-#include <linux/wireless.h>
 #include "wlt.h"
-#include "wlt_ioctl.h"
+#include "wlt_wnetdev.h"
 
-struct wlt_dev *wlt_init(char *name)
+struct wlt_wdev *wlt_wdev_init(char *namep)
 {
-    struct wlt_dev *wdev;
+    struct wlt_wdev *wdevp;
 
-    if (name == NULL)
-	return NULL;
+    if (namep == NULL)
+	goto ERRINVAL;
 
-    wdev = malloc(sizeof(*wdev));
-    if (wdev == NULL) {
+    wdevp = malloc(sizeof(*wdevp));
+    if (wdevp == NULL) {
 	perror("malloc");
-	return NULL;
+	goto ERRMEM;
     }
 
-    wdev->sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (wdev->sockfd == -1) {
-	perror("socket");
-	free(wdev);
-	return NULL;
-    }
+    if (wlt_wdev_open(wdevp) == -1)
+	goto ERRSOCK;
 
-    strncpy(wdev->name, name, IFNAMSIZ);
+    strncpy(wdevp->name, namep, sizeof(wdevp->name) - 1);
 
-    if (wlt_getindex(wdev) == -1) {
-	close(wdev->sockfd);
-	free(wdev);
-	return NULL;
-    }
+    if (wlt_getindex(wdevp) == -1)
+	goto ERRIOCTL;
 
-    if (wlt_getmode(wdev) == -1) {
-	close(wdev->sockfd);
-	free(wdev);
-	return NULL;
-    }
+    if (wlt_getmode(wdevp) == -1)
+	goto ERRIOCTL;
 
     /*
      * In initially plugged state, ioctl prints error while getting
      * channel.
      */
-    wdev->chann = 1;
-    return wdev;
+    wdevp->chann = 1;
+    return wdevp;
+
+ERRIOCTL:
+    wlt_wdev_close(wdevp);
+
+ERRSOCK:
+    free(wdevp);
+
+ERRINVAL:
+ERRMEM:
+    return NULL;
 }
 
-void wlt_destroy(struct wlt_dev *wdev)
+void wlt_wdev_destroy(struct wlt_wdev *wdevp)
 {
-    close(wdev->sockfd);
-    memset(wdev, 0x00, sizeof(*wdev));
-    free(wdev);
+    wlt_wdev_close(wdevp);
+    memset(wdevp, 0x00, sizeof(*wdevp));
+    free(wdevp);
 }
