@@ -2,201 +2,198 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <setjmp.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/epoll.h>
-#include <linux/wireless.h>
 #include "wlt.h"
-#include "wlt_ioctl.h"
+#include "wlt_wnetdev.h"
 #include "wlt_ieee80211_pcap.h"
 #include "wlt_ieee80211_ap.h"
+#include "io_multiplex.h"
+#include "fd.h"
 
 #define WLT_IS_X_IN_RANGE(min, x, max) (((x) >= (min)) && ((x) < (max)))
 #define WLT_IS_X_GT_LT(min, x, max) (((x) > (min)) && ((x) < (max)))
 
-static int ___wlt_ieee80211_beacon_parser(struct wlt_ieee80211_mgmt_frm *frm,
-					  ssize_t len,
-					  struct wlt_ieee80211_ap *ap)
-{
-    int res, done;
-    struct wlt_ieee80211_beacon *bean;
-    struct wlt_ieee80211_tld *ie;
-    
-    if (frm == NULL || len < 0 || ap == NULL)
-	return -1;
+#define PARSER_OTHER_FRAME 1
 
-    bean = (struct wlt_ieee80211_beacon *) frm->variable;
-    ie = (struct wlt_ieee80211_tld *) bean->variable;
-
-    res = 0;
-    done = 0;
-    while (len > 0 && done == 0) {
-	if (!WLT_IS_X_GT_LT(0, ie->len, len)) {
-	    res = -1;
-	    break;
-	}
-
-	switch (ie->type) {
-	case 0x00:
-	    /* SSID */
-	    if (ie->len > WLT_IEEE80211_APNAMSIZ - 1) {
-		done = 1;
-		break;
-	    }
-	    
-	    strncpy(ap->ssid, (char *) ie->data, ie->len);
-	    ap->ssid[ie->len] = '\0';
-	    done = 1;
-	    break;
-	default:
-	    done = 1;
-	    break;
-	}
-
-	ie = (struct wlt_ieee80211_tld *) ((uint8_t *) ie + ie->len);
-	len -= ie->len;
-    }
-    return res;
-}
-
-static int
-___wlt_ieee80211_assoc_req_parser(struct wlt_ieee80211_mgmt_frm *frm,
-				  ssize_t len,
-				  struct wlt_ieee80211_ap *ap)
-{
-    int res, done;
-    struct wlt_ieee80211_assoc_req *assoc_req;
-    struct wlt_ieee80211_tld *ie;
-
-    if (frm == NULL || len < 0 || ap == NULL)
-	return -1;
-
-    assoc_req = (struct wlt_ieee80211_assoc_req *) frm->variable;
-    ie = (struct wlt_ieee80211_tld *) assoc_req->variable;
-
-    done = 0;
-    res = 0;
-    while (len > 0 && done == 0) {
-	if (!WLT_IS_X_GT_LT(0, ie->len, len)) {
-	    res = -1;
-	    break;
-	}
-
-	switch (ie->type) {
-	case 0x00:
-	    /* SSID */
-	    if (ie->len > WLT_IEEE80211_APNAMSIZ - 1) {
-		done = 1;
-		break;
-	    }
-	    
-	    strncpy(ap->ssid, (char *) ie->data, ie->len);
-	    ap->ssid[ie->len] = '\0';
-	    done = 1;
-	    break;
-	default:
-	    done = 1;
-	    break;
-	}
-
-	ie = (struct wlt_ieee80211_tld *) ((uint8_t *) ie + ie->len);
-	len -= ie->len;
-    }
-    return res;
-}
-
-static int __wlt_ieee80211_mgmt_parser(void *buff,
+static int wlt_ieee80211_beacon_parser(struct wlt_ieee80211_mgmt_frm *mgmtp,
 				       ssize_t len,
 				       struct wlt_ieee80211_ap *ap)
 {
+    struct wlt_ieee80211_beacon *beanp;
+    struct wlt_ieee80211_tld *iep;
+    
+    if (mgmtp == NULL || len < 0 || ap == NULL)
+	goto OUT;
+
+    beanp = (struct wlt_ieee80211_beacon *) mgmtp->variable;
+    iep = (struct wlt_ieee80211_tld *) beanp->variable;
+
+    while (len > 0) {
+	if (!WLT_IS_X_GT_LT(0, iep->len, len))
+	    goto OUT;
+
+	switch (iep->type) {
+	case 0x00:
+	    /* SSID */
+	    if (iep->len > WLT_IEEE80211_APNAMSIZ - 1)
+		goto OUT;
+	    
+	    strncpy(ap->ssid, (char *) iep->data, iep->len);
+	    ap->ssid[iep->len] = '\0';
+	    break;
+	default:
+	    goto FINISH;
+	}
+
+	iep = (struct wlt_ieee80211_tld *) ((uint8_t *) iep + iep->len);
+	len -= iep->len;
+    }
+
+FINISH:
+    return 0;
+
+OUT:
+    return -1;
+}
+
+static int
+wlt_ieee80211_assoc_req_parser(struct wlt_ieee80211_mgmt_frm *mgmtp,
+			       ssize_t len,
+			       struct wlt_ieee80211_ap *ap)
+{
+    struct wlt_ieee80211_assoc_req *assocp;
+    struct wlt_ieee80211_tld *iep;
+
+    if (mgmtp == NULL || len < 0 || ap == NULL)
+	goto OUT;
+
+    assocp = (struct wlt_ieee80211_assoc_req *) mgmtp->variable;
+    iep = (struct wlt_ieee80211_tld *) assocp->variable;
+
+    while (len > 0) {
+	if (!WLT_IS_X_GT_LT(0, iep->len, len))
+	    goto OUT;
+
+	switch (iep->type) {
+	case 0x00:
+	    /* SSID */
+	    if (iep->len > WLT_IEEE80211_APNAMSIZ - 1)
+		goto OUT;
+	    
+	    strncpy(ap->ssid, (char *) iep->data, iep->len);
+	    ap->ssid[iep->len] = '\0';
+	    break;
+	default:
+	    goto FINISH;
+	}
+
+	iep = (struct wlt_ieee80211_tld *) ((uint8_t *) iep + iep->len);
+	len -= iep->len;
+    }
+
+FINISH:
+    return 0;
+
+OUT:
+    return -1;
+}
+
+static int wlt_ieee80211_mgmt_parser(void *buffp,
+				     ssize_t len,
+				     struct wlt_ieee80211_ap *ap)
+{
     int res;
-    struct wlt_ieee80211_mgmt_frm *frm;
-    uint8_t *bssid;
+    struct wlt_ieee80211_mgmt_frm *mgmtp;
+    uint8_t *bssidp;
 
-    if (buff == NULL || len < 0 || ap == NULL)
-	return -1;
+    if (buffp == NULL || len < 0 || ap == NULL)
+	goto OUT;
 
-    frm = buff;
-    switch (frm->fc.ds) {
-    case 0b00:
+    mgmtp = buffp;
+    switch (mgmtp->fc.ds & 0x3) {
+    case 0:
 	/* IBSS or BSS */
-	bssid = frm->addr3;
+	bssidp = mgmtp->addr3;
 	break;
-    case 0b01:
+    case 1:
 	/* From AP */
-	bssid = frm->addr2;
+	bssidp = mgmtp->addr2;
 	break;
-    case 0b10:
+    case 2:
 	/* To AP */
-	bssid = frm->addr1;
+	bssidp = mgmtp->addr1;
 	break;
-    case 0b11:
+    case 3:
 	/* Wireless bridge */
-	bssid = NULL;
+	bssidp = NULL;
 	break;
     default:
-	bssid = NULL;
+	bssidp = NULL;
 	break;
     }
 
-    if (bssid) {
-	memcpy(ap->bssid, bssid, 6);
+    if (bssidp) {
+	memcpy(ap->bssid, bssidp, 6);
 	ap->bssid[6] = !0;
     } else {
 	memset(ap->bssid, 0x00, 7);
     }
 
-    switch (frm->fc.subtype) {
-    case 0b0000:
+    switch (mgmtp->fc.subtype & 0xf) {
+    case 0:
 	/* Association request frame */
 	/* puts("assoc"); */
-	res = ___wlt_ieee80211_assoc_req_parser(frm, len, ap);
+	res = wlt_ieee80211_assoc_req_parser(mgmtp, len, ap);
 	break;
-    case 0b1000:
+    case 8:
 	/* Beacon frame */
-	res = ___wlt_ieee80211_beacon_parser(frm, len, ap);
+	res = wlt_ieee80211_beacon_parser(mgmtp, len, ap);
 	break;
     default:
-	res = -1;
+	res = PARSER_OTHER_FRAME;
 	break;
     }
     return res;
+
+OUT:
+    return -1;
 }
 
-static int __wlt_ieee80211_mac_parser(void *buff,
-				      ssize_t len,
-				      struct wlt_ieee80211_ap *ap)
+static int wlt_ieee80211_mac_parser(void *buffp,
+				    ssize_t len,
+				    struct wlt_ieee80211_ap *ap)
 {
     int res;
-    struct wlt_ieee80211_mac_frm *frm;
+    struct wlt_ieee80211_mac_frm *frmp;
 
-    if (buff == NULL || len < 0 || ap == NULL)
-	return -1;
+    if (buffp == NULL || len < 0 || ap == NULL)
+	goto OUT;
 
-    res = -1;
-    frm = buff;
-    switch (frm->fc.type) {
-    case 0b00:
+    frmp = buffp;
+    switch (frmp->fc.type & 0x3) {
+    case 0:
 	/* Management frame */
-	res = __wlt_ieee80211_mgmt_parser(buff, len, ap);
+	res = wlt_ieee80211_mgmt_parser(buffp, len, ap);
 	break;
-    case 0b01:
+    case 1:
 	/* Control frame */
+	res = PARSER_OTHER_FRAME;
 	break;
-    case 0b10:
+    case 2:
 	/* Data frame */
+	res = PARSER_OTHER_FRAME;
 	break;
     default:
-	res = -1;
+	res = PARSER_OTHER_FRAME;
 	break;
     }
     return res;
+
+OUT:
+    return -1;
 }
 
-static int ___wlt_ieee80211_radiotap_off(uint64_t present, unsigned int bitloc)
+static unsigned int wlt_ieee80211_radiotap_off(uint64_t present,
+					       unsigned int bitloc)
 {
     unsigned int offtab[] = {
 	sizeof(uint64_t),	/* TSFT */
@@ -219,126 +216,121 @@ static int ___wlt_ieee80211_radiotap_off(uint64_t present, unsigned int bitloc)
     return off;
 }
 
-static void *__wlt_ieee80211_radiotap_parser(void *buff,
-					     ssize_t len,
-					     struct wlt_ieee80211_ap *ap)
+static void *wlt_ieee80211_radiotap_parser(void *buffbasep,
+					   ssize_t len,
+					   struct wlt_ieee80211_ap *ap)
 {
-    int antsig_off;
-    struct wlt_ieee80211_radiotap_hdr *hdr;
-    uint8_t *data;
+    unsigned int antsig_off;
+    struct wlt_ieee80211_radiotap_hdr *radiohp;
+    uint8_t *datap;
 
-    if (buff == NULL || len < 0)
-	return NULL;
+    if (buffbasep == NULL || len < 0)
+	goto OUT;
 
-    hdr = buff;
+    radiohp = buffbasep;
 
-    antsig_off = ___wlt_ieee80211_radiotap_off(*((uint64_t *) &hdr->present),
-					       WLT_RADIOTAP_ANTSIG_BITLOC);
-    if (antsig_off == -1)
-	return NULL;
+    antsig_off = wlt_ieee80211_radiotap_off(*((uint64_t *) &radiohp->present),
+					    WLT_RADIOTAP_ANTSIG_BITLOC);
 
-    if (WLT_IS_RADIOTAP_PRESENCE_EXTENDED(hdr->present)) {
-	data = hdr->variable + antsig_off + sizeof(uint32_t);
+    if (WLT_IS_RADIOTAP_PRESENCE_EXTENDED(radiohp->present)) {
+	datap = radiohp->variable + antsig_off + sizeof(uint32_t);
     } else {
-	data = hdr->variable + antsig_off;
+	datap = radiohp->variable + antsig_off;
     }
-    ap->antsig = (int8_t) *data;
+    ap->antsig = (int8_t) *datap;
     /* printf("antsig: %d\n", antsig); */
 
     if (ap->antsig >= 0)
-	return NULL;
+	goto OUT;
     
-    if (!WLT_IS_X_IN_RANGE(0, hdr->len, len))
-	return NULL;
-    return (buff + hdr->len);
+    if (!WLT_IS_X_IN_RANGE(0, radiohp->len, len))
+	goto OUT;
+    
+    return (void *) ((uint8_t *) buffbasep + radiohp->len);
+
+OUT:
+    return NULL;
 }
 
-static int _wlt_ieee80211_parser(void *buff,
-				 ssize_t len,
-				 struct wlt_ieee80211_ap *ap)
+static int wlt_ieee80211_parser(void *buffbasep,
+				ssize_t len,
+				struct wlt_ieee80211_ap *ap)
 {
     void *buffp;
     
-    if (buff == NULL || len < 0)
-	return -1;
+    if (buffbasep == NULL || len < 0)
+	goto OUT;
 
     /* puts("There is a packet.."); */
 
-    buffp = __wlt_ieee80211_radiotap_parser(buff, len, ap);
+    buffp = wlt_ieee80211_radiotap_parser(buffbasep, len, ap);
     if (buffp == NULL)
-	return -1;
+	goto OUT;
 
-    if (__wlt_ieee80211_mac_parser(buffp, len, ap) == -1)
-	return -1;
+    if (wlt_ieee80211_mac_parser(buffp, len, ap) == -1)
+	goto OUT;
+    
     return 0;
+
+OUT:
+    return -1;
 }
 
 #define MAX_EVTCNT 128
 
-/* wlt_ieee80211_pcap: capture ieee80211 packets */
-int wlt_ieee80211_pcap(struct wlt_dev *wdev)
+/* wlt_ieee80211_pcap: heart of IEEE 802.11 sniffing */
+int wlt_ieee80211_pcap(struct wlt_wdev *wdevp)
 {
-    int fdflags, epollfd, evtcnt, i;
+    int evtcnt, i;
     int res;
-    struct epoll_event evts[2], epoll_evts[MAX_EVTCNT];
-    struct wlt_ieee80211_ap *apbuf, *ap;
+    struct io_event *io_evtp;
+    struct wlt_ieee80211_ap *apbufp, *ap;
     aplist_t auth_aplist;
     ssize_t frmlen;
     uint8_t buff[WLT_IEEE80211_BUFSIZ];
+    io_desc_t *iosp;
 
-    if (wdev == NULL)
-	return -1;
-
-    if (wdev->mode != IW_MODE_MONITOR)
-	if (wlt_setmode(wdev, IW_MODE_MONITOR) == -1)
-	    return -1;
-
-    fdflags = fcntl(wdev->sockfd, F_GETFL);
-    fdflags |= O_NONBLOCK;
-    if (fcntl(wdev->sockfd, F_SETFL, fdflags) < 0) {
-	perror("fcntl");
-	return -1;
-    }
+    res = -1;
     
-    epollfd = epoll_create(2);
-    if (epollfd < 0) {
-	perror("epoll_create");
-	return -1;
-    }
+    if (!wdevp)
+	goto OUT;
+
+    if (!WLT_IS_WDEV_MODE_MONITOR(wdevp->mode))
+	if (WLT_WDEV_SET_MONITOR(wdevp) == -1)
+	    goto OUT;
+
+    io_evtp = io_event_init(2, MAX_EVTCNT, 5000);
+    if (!io_evtp)
+	goto OUT;
+
+    if (io_event_add(io_evtp, wlt_wdev_getdesc(wdevp)) == -1)
+	goto OUT_DESTROY_IOEVENT;
     
-    evts[0].events = EPOLLIN;
-    evts[0].data.fd = wdev->sockfd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, wdev->sockfd, &evts[0]) < 0) {
-	perror("epoll_ctl");
-	goto FAIL_CLOSE_EPOLLFD;
-    }
+    if (io_event_add(io_evtp, file_getdesc(stdin)) == -1)
+	goto OUT_DESTROY_IOEVENT;
 
-    evts[1].events = EPOLLIN;
-    evts[1].data.fd = STDIN_FILENO;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, STDIN_FILENO, &evts[1]) < 0) {
-	perror("epoll_ctl");
-	goto FAIL_CLOSE_EPOLLFD;
-    }
-
-    apbuf = wlt_ieee80211_ap_init();
-    if (apbuf == NULL)
-	goto FAIL_CLOSE_EPOLLFD;
+    apbufp = wlt_ieee80211_ap_init();
+    if (apbufp == NULL)
+	goto OUT_DESTROY_IOEVENT;
 
     APLIST_INIT(&auth_aplist);
     
     while (1) {
-	evtcnt = epoll_wait(epollfd, epoll_evts, MAX_EVTCNT, 5000);
+	evtcnt = io_event_cap(io_evtp);
 	if (evtcnt < 0) {
-	    perror("epoll_wait");
-	    goto FAIL_FREE_MEMORY;
+	    res = -1;
+	    goto OUT_DESTROY;
 	}
 
 	for (i = 0; i < evtcnt; i++) {
-	    if (epoll_evts[i].data.fd == wdev->sockfd) {
+	    iosp = IO_EVENT_GET_IOSBASE(io_evtp);
+	    
+	    if (IO_EVENT_GETDESC_FROM_IOSPTR_AND_ADVANCE(io_evtp, i, iosp)) {
+		apbufp->ssid[0] = '\0';
 		memset(buff, 0x00, sizeof(buff));
-		frmlen = read(wdev->sockfd, buff, WLT_IEEE80211_BUFSIZ);
+		frmlen = wlt_wdev_read(wdevp, buff, WLT_IEEE80211_BUFSIZ);
 		if (frmlen >= 0) {
-		    res = _wlt_ieee80211_parser(buff, frmlen, apbuf);
+		    res = wlt_ieee80211_parser(buff, frmlen, apbufp);
 		}
 
 		/* if (!res) { */
@@ -346,43 +338,56 @@ int wlt_ieee80211_pcap(struct wlt_dev *wdev)
 		/*     memset(apbuf, 0x00, sizeof(*apbuf)); */
 		/* } */
 
-		if (!res && (wlt_ieee80211_ap_search(&auth_aplist, apbuf) ==
-			     WLT_IEEE80211_AP_NOT_FOUND)) {
+		if (!res && (wlt_ieee80211_ap_search(&auth_aplist, apbufp)
+			     == WLT_IEEE80211_AP_NOT_FOUND)) {
 		    ap = wlt_ieee80211_ap_init();
-		    if (ap == NULL)
-			goto FAIL_FREE_MEMORY;
+		    if (ap == NULL) {
+			res = -1;
+			goto OUT_DESTROY;
+		    }
 
-		    memcpy(ap, apbuf, offsetof(struct wlt_ieee80211_ap, node));
+		    memcpy(ap, apbufp, offsetof(struct wlt_ieee80211_ap,
+						node));
 		    wlt_ieee80211_ap_add_tail(&auth_aplist, ap);
-		    printf("%s - %d\n", ap->ssid, ap->antsig);
+		    printf("%s\t%02x:%02x:%02x:%02x:%02x:%02x\t%d\n",
+			   (ap->ssid[0] != '\0') ? ap->ssid : "Unknown",
+			   ap->bssid[0],
+			   ap->bssid[1],
+			   ap->bssid[2],
+			   ap->bssid[3],
+			   ap->bssid[4],
+			   ap->bssid[5],
+			   ap->antsig);
 		}
 	    }
 
-	    if (epoll_evts[i].data.fd == STDIN_FILENO) {
+	    if (IO_EVENT_GETDESC_FROM_IOSPTR_AND_ADVANCE(io_evtp, \
+							 i, \
+							 iosp)) {
 		/* printf("user key: %c\n", getchar()); */
-		if (getchar() == 'q')
-		    goto OUT;
+		if (getchar() == 'q') {
+		    res = 0;
+		    goto OUT_DESTROY;
+		}
 	    }
 	}
 
 	/* puts("channel hopping.."); */
 	/* printf("channel: %d\n", wdev->chann); */
-	if (wlt_setchann(wdev,
-			 WLT_IEEE80211_24_HOP_CHANN(wdev->chann)) == -1)
-	    goto FAIL_FREE_MEMORY;
+	if (wlt_setchann(wdevp,
+			 WLT_IEEE80211_24_HOP_CHANN(wdevp->chann)) == -1) {
+	    res = -1;
+	    goto OUT_DESTROY;
+	}
     }
 
-FAIL_FREE_MEMORY:
-    wlt_ieee80211_ap_destroy(apbuf);
+OUT_DESTROY:
+    wlt_ieee80211_ap_destroy(apbufp);
     wlt_ieee80211_ap_list_clear(&auth_aplist);
-    
-FAIL_CLOSE_EPOLLFD:
-    close(epollfd);
-    return -1;
-    
+
+OUT_DESTROY_IOEVENT:
+    io_event_destroy(io_evtp);
+
 OUT:
-    close(epollfd);
-    wlt_ieee80211_ap_destroy(apbuf);
-    wlt_ieee80211_ap_list_clear(&auth_aplist);
-    return 0;
+    return res;
 }
